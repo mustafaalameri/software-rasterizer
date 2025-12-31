@@ -1,0 +1,9 @@
+*.o
+*.exe
+*.dll
+*.so
+*.out
+*.o
+*.lib
+*.a
+*.tmp
