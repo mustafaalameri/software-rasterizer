@@ -1,0 +1,230 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <float.h>
+
+#include "clock.h"
+#include "window.h"
+#include "draw.h"
+#include "clip.h"
+
+#include <stb/stb_image.h>
+
+/* In seconds */
+#define TARGET_FPS 60
+/* In milliseconds */
+#define TARGET_FRAME_TIME (1000.0 / (double) (TARGET_FPS))
+
+float calculate_triangle_winding(Vec3f triangle[3]) {
+	float differenceX1X0 = triangle[1][0] - triangle[0][0];
+	float differenceY1Y0 = triangle[1][1] - triangle[0][1];
+	float differenceX2X1 = triangle[2][0] - triangle[1][0];
+	float differenceY2Y1 = triangle[2][1] - triangle[1][1];
+	/* Z component of triangle normal */
+	return differenceX1X0 * differenceY2Y1 - differenceY1Y0 * differenceX2X1;
+}
+
+void reverse_triangle_winding(Vec3f triangle[3]) {
+	Vec4f oldVertex2;
+	memcpy(oldVertex2, triangle[2], sizeof(Vec3f)); // Save V2
+	memcpy(triangle[2], triangle[1], sizeof(Vec3f)); // Copy V1 -> V2
+	memcpy(triangle[1], oldVertex2, sizeof(Vec3f)); // Coppy saved V2 -> V1
+}
+
+void correct_triangle_winding(Vec3f triangle[3]) {
+	if (calculate_triangle_winding(triangle) > 0.0) {
+		reverse_triangle_winding(triangle);
+	}
+}
+
+void draw_clipped_triangle(Triangle triangle_clipped, Bitmap_t bitmap) {
+	/* Manually convert from Vec4f -> Vec3f, and do a perspective divide in the proccess */
+	Vec3f triangle_projected[3] = {
+		{
+			triangle_clipped[0][0] / triangle_clipped[0][3],
+			triangle_clipped[0][1] / triangle_clipped[0][3],
+			triangle_clipped[0][2] / triangle_clipped[0][3]
+		},
+		{
+			triangle_clipped[1][0] / triangle_clipped[1][3],
+			triangle_clipped[1][1] / triangle_clipped[1][3],
+			triangle_clipped[1][2] / triangle_clipped[1][3]
+		},
+		{
+			triangle_clipped[2][0] / triangle_clipped[2][3],
+			triangle_clipped[2][1] / triangle_clipped[2][3],
+			triangle_clipped[2][2] / triangle_clipped[2][3]
+		}
+	};
+	correct_triangle_winding(triangle_projected);
+	fill_triangle(triangle_projected, bitmap);
+}
+
+void draw_triangle(const Triangle triangle, const Mat4x4f matrix, const Bitmap_t bitmap) {
+	Triangle triangle_transformed;
+	mat4x4f_mul_vec4f(matrix, triangle[0], triangle_transformed[0]);
+	mat4x4f_mul_vec4f(matrix, triangle[1], triangle_transformed[1]);
+	mat4x4f_mul_vec4f(matrix, triangle[2], triangle_transformed[2]);
+
+	Triangle clippedTriangles[12];
+	int clippedTriangleCount = 0;
+	clip_triangle(triangle_transformed, clippedTriangles, &clippedTriangleCount, 3);
+
+	for (int triangleIndex = 0; triangleIndex < clippedTriangleCount; ++triangleIndex) {
+		draw_clipped_triangle(clippedTriangles[triangleIndex], bitmap);
+	}
+}
+
+typedef struct {
+	bool hasMoved;
+	Vec3f position;
+} Camera;
+Camera camera = {true, {0.0, 0.0, 1.0}};
+bool hasResized = true;
+
+static bool isRunning = true;
+Window mainWindow;
+Bitmap_t bitmap;
+
+static LRESULT CALLBACK window_procedure_callback(HWND hWindow, UINT messageCode, WPARAM wordParameter, LPARAM longParameter) {
+	switch (messageCode) {
+		case WM_ERASEBKGND:
+			return 1;
+		case WM_SIZE:
+			GetClientRect(hWindow, &(mainWindow.rectangle));
+
+			DeleteObject(mainWindow.hBufferBitmap);
+			WORD newWidth = LOWORD(longParameter);
+			WORD newHeight = HIWORD(longParameter);
+			mainWindow.hBufferBitmap = CreateCompatibleBitmap(mainWindow.hDeviceContext, newWidth, newHeight);
+			SelectObject(mainWindow.hBufferDeviceContext, mainWindow.hBufferBitmap);
+
+			bitmap.width = newWidth;
+			bitmap.height = newHeight;
+			bitmap.stride = calculate_stride(bitmap.width, bitmap.channelCount);
+			bitmap.pData = realloc(bitmap.pData, bitmap.stride * bitmap.height * sizeof(uint8_t));
+
+			hasResized = true;
+
+			return 0;
+		case WM_DESTROY:
+			PostQuitMessage(0);
+			isRunning = false;
+
+			return 0;
+		default:
+			return DefWindowProc(hWindow, messageCode, wordParameter, longParameter);
+	}
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pStrArgs, int windowState) {
+	/* Must be 4 for padding requirements */
+	bitmap = create_bitmap(640, 640, 4);
+
+	mainWindow = create_window(hInstance, bitmap, TEXT("3D Rasterizer"), TEXT("Rasterizer3D"), window_procedure_callback, true);
+
+	double currentTime, lastTime, deltaTime, FPS = 0.0;
+	init_clock();
+	currentTime = get_time();
+
+	MSG message = {0};
+	while (isRunning) {
+		lastTime = currentTime;
+
+		poll_window_events(mainWindow.handle);
+
+		const float speed = 0.001;
+		/* Virtual key codes (VK_-prefixed macros) don't exist for letters and numbers unfortunately */
+		/* W: Forward */
+		if (GetAsyncKeyState(0x57) & 0x8000) {
+			camera.position[2] += -speed * deltaTime;
+			camera.hasMoved = true;
+		}
+		/* S: Backward */
+		if (GetAsyncKeyState(0x53) & 0x8000) {
+			camera.position[2] += speed * deltaTime;
+			camera.hasMoved = true;
+		}
+		/* D: Right */
+		if (GetAsyncKeyState(0x44) & 0x8000) {
+			camera.position[0] += speed * deltaTime;
+			camera.hasMoved = true;
+		}
+		/* A: Left */
+		if (GetAsyncKeyState(0x41) & 0x8000) {
+			camera.position[0] += -speed * deltaTime;
+			camera.hasMoved = true;
+		}
+		/* E: Up */
+		if (GetAsyncKeyState(0x45) & 0x8000) {
+			camera.position[1] += speed * deltaTime;
+			camera.hasMoved = true;
+		}
+		/* Q: Down */
+		if (GetAsyncKeyState(0x51) & 0x8000) {
+			camera.position[1] += -speed * deltaTime;
+			camera.hasMoved = true;
+		}
+
+		/* Only scale matrix used as model */
+		Mat4x4f projection, view, projectionView, model, rotation, scale, translation, MVP;
+		bool mustUpdateProjectionView = false;
+		if (hasResized) {
+			mat4x4f_perspective(M_PI * 0.5, (float) bitmap.width / (float) bitmap.height, 0.1, 2.0, projection);
+			hasResized = false;
+			mustUpdateProjectionView = true;
+		}
+		if (camera.hasMoved) {
+			mat4x4f_camera(camera.position, (Vec3f) {1.0, 0.0, 0.0}, (Vec3f) {0.0, 1.0, 0.0}, (Vec3f) {0.0, 0.0, 1.0}, view);
+			camera.hasMoved = false;
+			mustUpdateProjectionView = true;
+		}
+		if (mustUpdateProjectionView) {
+			mat4x4f_mul_mat4x4f(projection, view, projectionView);
+			mustUpdateProjectionView = false;
+		}
+		mat4x4f_scale((Vec3f) {0.2, 0.2, 0.2}, scale);
+		mat4x4f_rotation_y(currentTime * 0.001, rotation);
+		mat4x4f_mul_mat4x4f(scale, rotation, model);
+		mat4x4f_mul_mat4x4f(projectionView, model, MVP);
+
+		clear_bitmap(bitmap);
+
+		const float positions[] = {
+			-1.0, 1.0, 0.0, /* top-left */
+			1.0, 1.0, 0.0, /* top-right */
+			-1.0, -1.0, 0.0, /* bottom-left */
+			1.0, -1.0, 0.0 /* bottom-right */
+		};
+		const unsigned int indices[] = {
+			0, 1, 2,
+			1, 3, 2
+		};
+		const unsigned int polygonCount = 2;
+		for (unsigned int i = 0; i < polygonCount; i++) {
+			Vec4f triangle[3] = {
+				{positions[indices[i * 3 + 0] * 3 + 0], positions[indices[i * 3 + 0] * 3 + 1], positions[indices[i * 3 + 0] * 3 + 2], 1.0},
+				{positions[indices[i * 3 + 1] * 3 + 0], positions[indices[i * 3 + 1] * 3 + 1], positions[indices[i * 3 + 1] * 3 + 2], 1.0},
+				{positions[indices[i * 3 + 2] * 3 + 0], positions[indices[i * 3 + 2] * 3 + 1], positions[indices[i * 3 + 2] * 3 + 2], 1.0}
+			};
+			draw_triangle(triangle, MVP, bitmap);
+		}
+
+		blit_bitmap_to_window(bitmap, mainWindow);
+		RedrawWindow(mainWindow.handle, NULL, NULL, RDW_INVALIDATE);
+
+		currentTime = get_time();
+		deltaTime = currentTime - lastTime;
+		FPS = deltaTime / TARGET_FRAME_TIME * TARGET_FPS;
+
+		if (deltaTime < TARGET_FRAME_TIME) {
+			while (deltaTime < TARGET_FRAME_TIME) {
+				deltaTime = get_time() - lastTime;
+			}
+		}
+	}
+
+	free(bitmap.pData);
+
+	return EXIT_SUCCESS;
+}
