@@ -37,7 +37,7 @@ void correct_triangle_winding(Vec3f triangle[3]) {
 	}
 }
 
-void draw_clipped_triangle(Triangle triangle_clipped, Bitmap_t bitmap) {
+void draw_clipped_triangle(const Triangle triangle_clipped, Bitmap_t bitmap) {
 	/* Manually convert from Vec4f -> Vec3f, and do a perspective divide in the proccess */
 	Vec3f triangle_projected[3] = {
 		{
@@ -66,6 +66,7 @@ void draw_triangle(const Triangle triangle, const Mat4x4f matrix, const Bitmap_t
 	mat4x4f_mul_vec4f(matrix, triangle[1], triangle_transformed[1]);
 	mat4x4f_mul_vec4f(matrix, triangle[2], triangle_transformed[2]);
 
+#if CLIPPING_METHOD == GEOMETRIC_CLIPPING
 	Triangle clippedTriangles[12];
 	int clippedTriangleCount = 0;
 	clip_triangle(triangle_transformed, clippedTriangles, &clippedTriangleCount, 3);
@@ -73,6 +74,9 @@ void draw_triangle(const Triangle triangle, const Mat4x4f matrix, const Bitmap_t
 	for (int triangleIndex = 0; triangleIndex < clippedTriangleCount; ++triangleIndex) {
 		draw_clipped_triangle(clippedTriangles[triangleIndex], bitmap);
 	}
+#else
+	draw_clipped_triangle(triangle_transformed, bitmap);
+#endif
 }
 
 typedef struct {
@@ -134,7 +138,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pStrArgs,
 		poll_window_events(mainWindow.handle);
 
 		const float speed = 0.001;
-		/* Virtual key codes (VK_-prefixed macros) don't exist for letters and numbers unfortunately */
+		/* Virtual key codes (VK_-prefixed macros) don't exist for letters and numbers unfortunately-
+		https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes */
 		/* W: Forward */
 		if (GetAsyncKeyState(0x57) & 0x8000) {
 			camera.position[2] += -speed * deltaTime;
