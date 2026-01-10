@@ -3,16 +3,16 @@
 
 #include <rml/rml.h>
 
-#define GEOMETRIC_CLIPPING 0x001
-#define SCREEN_SPACE_CLIPPING 0x002
-#define GUARD_BAND_CLIPPING 0x003
+#define GEOMETRIC_CLIPPING 0x000
+#define SCREEN_SPACE_CLIPPING 0x001
+#define GUARD_BAND_CLIPPING 0x002
 
 #ifndef CLIPPING_METHOD
 #define CLIPPING_METHOD GEOMETRIC_CLIPPING
 #endif
 
 #if CLIPPING_METHOD == GUARD_BAND_CLIPPING
-#warning Clipping method is set to guard band clipping, when rendering is done in software. Using screen space clipping as fallback.
+/* Really depends on the number of bits allocated on memory for each position, leave for now. */
 #define CLIPPING_METHOD SCREEN_SPACE_CLIPPING 
 #endif
 
