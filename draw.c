@@ -31,34 +31,11 @@ void put_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, const Bitmap_t bit
 }
 
 void scanline(int x0, int x1, int y, const Bitmap_t bitmap) {
-	Vec2i p;
-	p[1] = y;
 	if (x0 > x1) {
 		swapi(&x0, &x1);
 	}
-	for (p[0] = x0; p[0] < x1; p[0] += 1) {
-		put_pixel(p[0], p[1], 255, 255, 0, bitmap);
-	}
-}
-
-void scanline_triangle(float *v0, float *v1, float *vPeak, const Bitmap_t bitmap) {
-	float dy = v0[1] - vPeak[1];
-	float invSlope0 = (v0[0] - vPeak[0]) / dy;
-	float invSlope1 = (v1[0] - vPeak[0]) / dy;
-	float x0 = vPeak[0];
-	float x1 = vPeak[0];
-	if (vPeak[1] < v0[1]) {
-		for (float y = vPeak[1]; y < v0[1]; y += 1.0) {
-			scanline(x0, x1, y, bitmap);
-			x0 += invSlope0;
-			x1 += invSlope1;
-		}
-	} else {
-		for (float y = vPeak[1]; y > v0[1]; y -= 1.0) {
-			scanline(x0, x1, y, bitmap);
-			x0 -= invSlope0;
-			x1 -= invSlope1;
-		}
+	for (; x0 <= x1; x0++) {
+		put_pixel(x0, y, 255, 0, 0, bitmap);
 	}
 }
 
@@ -71,24 +48,32 @@ void fill_triangle(Vec3f triangle[3], const Bitmap_t bitmap) {
 	triangle[2][1] = Y_NDC_TO_SC(triangle[2][1]);
 
 #if RASTERIZATION_METHOD == SCANLINE_RASTERIZATION
-	float *v0 = triangle[0], *v1 = triangle[1], *v2 = triangle[2], *vTemp;
-	if (v0[1] > v1[1]) {vTemp = v0; v0 = v1; v1 = vTemp;}
-	if (v1[1] > v2[1]) {vTemp = v1; v1 = v2; v2 = vTemp;}
-	if (v0[1] > v1[1]) {vTemp = v0; v0 = v1; v1 = vTemp;}
-	/* Already have a zero-slope edge */
-	if (v0[1] == v1[1]) {
-		if (v0[1] != v2[1]) {
-			scanline_triangle(v0, v1, v2, bitmap);
-		}
-	} else if (v1[1] == v2[1]) {
-		if (v1[1] != v0[1]) {
-			scanline_triangle(v1, v2, v0, bitmap);
-		}
-	} else {
-		/* Split into two triangles with the edge inbetween having a solpe of zero. */
-		Vec3f v3 = {v0[0] + (v1[1] - v0[1]) * (v2[0] - v0[0]) / (v2[1] - v0[1]), v1[1], 0.0};
-		scanline_triangle(v1, v3, v0, bitmap);
-		scanline_triangle(v1, v3, v2, bitmap);
+	/* Sort in ascending y order */
+	float *v0 = triangle[0];
+	float *v1 = triangle[1];
+	float *v2 = triangle[2];
+	float *tmp;
+
+	if (v0[1] > v1[1]) {tmp = v0; v0 = v1; v1 = tmp;}
+	if (v0[1] > v2[1]) {tmp = v0; v0 = v2; v2 = tmp;}
+	if (v1[1] > v2[1]) {tmp = v1; v1 = v2; v2 = tmp;}
+
+	float dyTotal = v2[1] - v0[1];
+	if (dyTotal == 0) return;
+	for (int y = v0[1]; y < v1[1]; y++) {
+		/* Lerp formula, ultimately */
+		float dySegment = v1[1] - v0[1];
+		if (dySegment == 0) return;
+		float x0 = v0[0] + ((v2[0] - v0[0]) * (y - v0[1])) / dyTotal;
+		float x1 = v0[0] + ((v1[0] - v0[0]) * (y - v0[1])) / dySegment;
+		scanline(x0, x1, y, bitmap);
+	}
+	for (int y = v1[1]; y < v2[1]; y++) {
+		float dySegment = v2[1] - v1[1];
+		if (dySegment == 0) return;
+		float x0 = v0[0] + ((v2[0] - v0[0]) * (y - v0[1])) / dyTotal;
+		float x1 = v1[0] + ((v2[0] - v1[0]) * (y - v1[1])) / dySegment;
+		scanline(x0, x1, y, bitmap);
 	}
 #else
 	/* Bounding box */
