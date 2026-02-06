@@ -42,6 +42,7 @@ void fill_triangle(Vec3f triangle[3], const Bitmap_t bitmap) {
 	float *v0 = triangle[0];
 	float *v1 = triangle[1];
 	float *v2 = triangle[2];
+<<<<<<< HEAD
 
 	// Sort by y
 	float* tmp;
@@ -65,6 +66,11 @@ void fill_triangle(Vec3f triangle[3], const Bitmap_t bitmap) {
 
 	float xLeft  = v0[0] + (yStart - v0[1]) * invSlope02;
 	float xRight = v0[0] + (yStart - v0[1]) * invSlope01;
+
+	float *vTemp;
+	if (v0[1] > v1[1]) {vTemp = v0; v0 = v1; v1 = vTemp;}
+	if (v0[1] > v2[1]) {vTemp = v0; v0 = v2; v2 = vTemp;}
+	if (v1[1] > v2[1]) {vTemp = v1; v1 = v2; v2 = vTemp;}
 
 	float dyTotal = v2[1] - v0[1];
 	if (dyTotal == 0) return;
