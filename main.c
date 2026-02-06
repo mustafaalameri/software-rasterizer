@@ -9,6 +9,7 @@
 #include "clip.h"
 #include "wind.h"
 #include "render.h"
+#include "pipeline.h"
 
 #include <stb/stb_image.h>
 
@@ -16,6 +17,7 @@
 #define TARGET_FPS 60
 /* In milliseconds */
 #define TARGET_FRAME_TIME (1000.0 / (double) (TARGET_FPS))
+
 
 typedef struct {
 	bool hasMoved;
@@ -139,18 +141,31 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pStrArgs,
 			-1.0, -1.0, 0.0, /* bottom-left */
 			1.0, -1.0, 0.0 /* bottom-right */
 		};
+		const float color[] = {
+			1.0, 0.0, 0.0, /* top-left */
+			0.0, 1.0, 0.0, /* top-right */
+			0.0, 0.0, 1.0, /* bottom-left */
+			1.0, 1.0, 0.0 /* bottom-right */
+		};
 		const unsigned int indices[] = {
 			0, 1, 2,
 			1, 3, 2
 		};
 		const unsigned int polygonCount = 2;
 		for (unsigned int i = 0; i < polygonCount; i++) {
-			Vec4f triangle[3] = {
-				{positions[indices[i * 3 + 0] * 3 + 0], positions[indices[i * 3 + 0] * 3 + 1], positions[indices[i * 3 + 0] * 3 + 2], 1.0},
-				{positions[indices[i * 3 + 1] * 3 + 0], positions[indices[i * 3 + 1] * 3 + 1], positions[indices[i * 3 + 1] * 3 + 2], 1.0},
-				{positions[indices[i * 3 + 2] * 3 + 0], positions[indices[i * 3 + 2] * 3 + 1], positions[indices[i * 3 + 2] * 3 + 2], 1.0}
-			};
-			render_triangle(triangle, MVP, bitmap);
+			currentTriangle.positions[0][0] = positions[indices[i * 3 + 0] * 3 + 0];
+			currentTriangle.positions[0][1] = positions[indices[i * 3 + 0] * 3 + 1];
+			currentTriangle.positions[0][2] = positions[indices[i * 3 + 0] * 3 + 2];
+			currentTriangle.positions[0][3] = 1.0;
+			currentTriangle.positions[1][0] = positions[indices[i * 3 + 1] * 3 + 0];
+			currentTriangle.positions[1][1] = positions[indices[i * 3 + 1] * 3 + 1];
+			currentTriangle.positions[1][2] = positions[indices[i * 3 + 1] * 3 + 2];
+			currentTriangle.positions[1][3] = 1.0;
+			currentTriangle.positions[2][0] = positions[indices[i * 3 + 2] * 3 + 0];
+			currentTriangle.positions[2][1] = positions[indices[i * 3 + 2] * 3 + 1];
+			currentTriangle.positions[2][2] = positions[indices[i * 3 + 2] * 3 + 2];
+			currentTriangle.positions[2][3] = 1.0;
+			render_triangle(currentTriangle.positions, MVP, bitmap);
 		}
 
 		blit_bitmap_to_window(bitmap, mainWindow);

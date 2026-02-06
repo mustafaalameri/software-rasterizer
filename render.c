@@ -3,7 +3,7 @@
 #include "wind.h"
 
 void render_clipped_triangle(const Triangle triangle_clipped, Bitmap_t bitmap) {
-	/* Manually convert from Vec4f -> Vec3f, and do a perspective divide in the proccess */
+	/* Perspective divide */
 	Vec3f triangle_projected[3] = {
 		{
 			triangle_clipped[0][0] / triangle_clipped[0][3],
