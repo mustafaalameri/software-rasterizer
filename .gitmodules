@@ -1,0 +1,3 @@
+[submodule "lib/winblit"]
+	path = lib/winblit
+	url = https://github.com/mustafaalameri/winblit
