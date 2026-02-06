@@ -42,7 +42,6 @@ void fill_triangle(Vec3f triangle[3], const Bitmap_t bitmap) {
 	float *v0 = triangle[0];
 	float *v1 = triangle[1];
 	float *v2 = triangle[2];
-<<<<<<< HEAD
 
 	// Sort by y
 	float* tmp;
