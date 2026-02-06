@@ -13,12 +13,6 @@ void swapf(float *a, float *b) {
 	*b = *a;
 }
 
-void swapi(int *a, int *b) {
-	int c = *a;
-	*a = *b;
-	*b = *a;
-}
-
 float edge_function(Vec3f triangle[3]) {
 	return (triangle[1][0] - triangle[0][0]) * (triangle[2][1] - triangle[0][1]) - (triangle[1][1] - triangle[0][1]) * (triangle[2][0] - triangle[0][0]);
 }
@@ -31,9 +25,6 @@ void put_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b, const Bitmap_t bit
 }
 
 void scanline(int x0, int x1, int y, const Bitmap_t bitmap) {
-	if (x0 > x1) {
-		swapi(&x0, &x1);
-	}
 	for (; x0 <= x1; x0++) {
 		put_pixel(x0, y, 255, 0, 0, bitmap);
 	}
@@ -48,32 +39,71 @@ void fill_triangle(Vec3f triangle[3], const Bitmap_t bitmap) {
 	triangle[2][1] = Y_NDC_TO_SC(triangle[2][1]);
 
 #if RASTERIZATION_METHOD == SCANLINE_RASTERIZATION
-	/* Sort in ascending y order */
 	float *v0 = triangle[0];
 	float *v1 = triangle[1];
 	float *v2 = triangle[2];
-	float *vTemp;
 
-	if (v0[1] > v1[1]) {vTemp = v0; v0 = v1; v1 = vTemp;}
-	if (v0[1] > v2[1]) {vTemp = v0; v0 = v2; v2 = vTemp;}
-	if (v1[1] > v2[1]) {vTemp = v1; v1 = v2; v2 = vTemp;}
+	// Sort by y
+	float* tmp;
+	if (v0[1] > v1[1]) { tmp = v0; v0 = v1; v1 = tmp; }
+	if (v0[1] > v2[1]) { tmp = v0; v0 = v2; v2 = tmp; }
+	if (v1[1] > v2[1]) { tmp = v1; v1 = v2; v2 = tmp; }
+
+	float dy02 = v2[1] - v0[1];
+	float dy01 = v1[1] - v0[1];
+	float dy12 = v2[1] - v1[1];
+
+	if (dy02 == 0) return;
+
+	float invSlope02 = (v2[0] - v0[0]) / dy02;
+	float invSlope01 = (dy01 != 0) ? (v1[0] - v0[0]) / dy01 : 0.0f;
+	float invSlope12 = (dy12 != 0) ? (v2[0] - v1[0]) / dy12 : 0.0f;
+
+	int yStart = (int) ceilf(v0[1]);
+	int yMid   = (int) ceilf(v1[1]);
+	int yEnd   = (int) ceilf(v2[1]);
+
+	float xLeft  = v0[0] + (yStart - v0[1]) * invSlope02;
+	float xRight = v0[0] + (yStart - v0[1]) * invSlope01;
 
 	float dyTotal = v2[1] - v0[1];
 	if (dyTotal == 0) return;
-	for (int y = v0[1]; y < v1[1]; y++) {
-		/* Lerp formula, ultimately */
-		float dySegment = v1[1] - v0[1];
-		if (dySegment == 0) return;
-		float x0 = v0[0] + ((v2[0] - v0[0]) * (y - v0[1])) / dyTotal;
-		float x1 = v0[0] + ((v1[0] - v0[0]) * (y - v0[1])) / dySegment;
-		scanline(x0, x1, y, bitmap);
+
+	/* Top half*/
+	for (int y = yStart; y < yMid; y++) {
+		float x0 = xLeft;
+		float x1 = xRight;
+
+		if (x0 > x1) {
+			float t = x0;
+			x0 = x1;
+			x1 = t;
+		}
+
+		scanline((int)x0, (int)x1, y, bitmap);
+
+		xLeft  += invSlope02;
+		xRight += invSlope01;
 	}
-	for (int y = v1[1]; y < v2[1]; y++) {
-		float dySegment = v2[1] - v1[1];
-		if (dySegment == 0) return;
-		float x0 = v0[0] + ((v2[0] - v0[0]) * (y - v0[1])) / dyTotal;
-		float x1 = v1[0] + ((v2[0] - v1[0]) * (y - v1[1])) / dySegment;
-		scanline(x0, x1, y, bitmap);
+
+	/* Bottom half
+	Only reset right x-walker because left is sorted to land on v1 */
+	xRight = v1[0] + (yMid - v1[1]) * invSlope12;
+
+	for (int y = yMid; y < yEnd; y++) {
+		float x0 = xLeft;
+		float x1 = xRight;
+
+		if (x0 > x1) {
+			float t = x0;
+			x0 = x1;
+			x1 = t;
+		}
+
+		scanline((int)x0, (int)x1, y, bitmap);
+
+		xLeft  += invSlope02;
+		xRight += invSlope12;
 	}
 #else
 	/* Bounding box */
