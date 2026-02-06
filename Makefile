@@ -8,9 +8,9 @@ TARGET = a.exe
 default: $(TARGET)
 	./$(TARGET)
 
-$(TARGET): main.o draw.o rml/rml.o clock.o stb.o clip.o wind.o
+$(TARGET): main.o draw.o rml/rml.o clock.o stb.o clip.o wind.o render.o
 	$(MAKE) -C lib
-	$(CC) main.o draw.o rml/rml.o clock.o stb.o clip.o wind.o $(LDFLAGS) -o$(TARGET)
+	$(CC) main.o draw.o rml/rml.o clock.o stb.o clip.o wind.o render.o $(LDFLAGS) -o$(TARGET)
 
 main.o: main.c
 	$(CC) -c main.c $(CFLAGS)
@@ -26,6 +26,8 @@ clip.o: clip.c
 	$(CC) -c clip.c $(CFLAGS)
 wind.o: wind.c
 	$(CC) -c wind.c $(CFLAGS)
+render.o: render.c
+	$(CC) -c render.c $(CFLAGS)
 
 clean:
 	$(RM) *.o *.exe

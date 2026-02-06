@@ -8,6 +8,7 @@
 #include "draw.h"
 #include "clip.h"
 #include "wind.h"
+#include "render.h"
 
 #include <stb/stb_image.h>
 
@@ -15,48 +16,6 @@
 #define TARGET_FPS 60
 /* In milliseconds */
 #define TARGET_FRAME_TIME (1000.0 / (double) (TARGET_FPS))
-
-void draw_clipped_triangle(const Triangle triangle_clipped, Bitmap_t bitmap) {
-	/* Manually convert from Vec4f -> Vec3f, and do a perspective divide in the proccess */
-	Vec3f triangle_projected[3] = {
-		{
-			triangle_clipped[0][0] / triangle_clipped[0][3],
-			triangle_clipped[0][1] / triangle_clipped[0][3],
-			triangle_clipped[0][2] / triangle_clipped[0][3]
-		},
-		{
-			triangle_clipped[1][0] / triangle_clipped[1][3],
-			triangle_clipped[1][1] / triangle_clipped[1][3],
-			triangle_clipped[1][2] / triangle_clipped[1][3]
-		},
-		{
-			triangle_clipped[2][0] / triangle_clipped[2][3],
-			triangle_clipped[2][1] / triangle_clipped[2][3],
-			triangle_clipped[2][2] / triangle_clipped[2][3]
-		}
-	};
-	correct_triangle_winding(triangle_projected);
-	fill_triangle(triangle_projected, bitmap);
-}
-
-void draw_triangle(const Triangle triangle, const Mat4x4f matrix, const Bitmap_t bitmap) {
-	Triangle triangle_transformed;
-	mat4x4f_mul_vec4f(matrix, triangle[0], triangle_transformed[0]);
-	mat4x4f_mul_vec4f(matrix, triangle[1], triangle_transformed[1]);
-	mat4x4f_mul_vec4f(matrix, triangle[2], triangle_transformed[2]);
-
-#if CLIPPING_METHOD == GEOMETRIC_CLIPPING
-	Triangle clippedTriangles[12];
-	int clippedTriangleCount = 0;
-	clip_triangle(triangle_transformed, clippedTriangles, &clippedTriangleCount, 3);
-
-	for (int triangleIndex = 0; triangleIndex < clippedTriangleCount; ++triangleIndex) {
-		draw_clipped_triangle(clippedTriangles[triangleIndex], bitmap);
-	}
-#else
-	draw_clipped_triangle(triangle_transformed, bitmap);
-#endif
-}
 
 typedef struct {
 	bool hasMoved;
@@ -191,7 +150,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pStrArgs,
 				{positions[indices[i * 3 + 1] * 3 + 0], positions[indices[i * 3 + 1] * 3 + 1], positions[indices[i * 3 + 1] * 3 + 2], 1.0},
 				{positions[indices[i * 3 + 2] * 3 + 0], positions[indices[i * 3 + 2] * 3 + 1], positions[indices[i * 3 + 2] * 3 + 2], 1.0}
 			};
-			draw_triangle(triangle, MVP, bitmap);
+			render_triangle(triangle, MVP, bitmap);
 		}
 
 		blit_bitmap_to_window(bitmap, mainWindow);
